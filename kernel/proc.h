@@ -105,4 +105,7 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+
+  //arg for sys_trace
+  uint64 maskNum;                 //maskNum to decide what syscall should be traced
 };

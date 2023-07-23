@@ -3,6 +3,7 @@
 #include "kernel/stat.h"
 #include "user/user.h"
 
+
 int
 main(int argc, char *argv[])
 {
@@ -14,8 +15,11 @@ main(int argc, char *argv[])
     exit(1);
   }
 
-  if (trace(atoi(argv[1])) < 0) {
+  int test = trace(atoi(argv[1]));
+
+  if (test < 0) {
     fprintf(2, "%s: trace failed\n", argv[0]);
+    // fprintf(2, "test: %d", test);
     exit(1);
   }
   
