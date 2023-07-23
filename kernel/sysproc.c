@@ -112,7 +112,7 @@ sys_trace(void)
 
 extern uint64 getnproc(void);
 extern uint64 kfreemem(void);
-
+//print out system infomation 
 uint64
 sys_sysinfo(void)
 {
