@@ -107,3 +107,26 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+
+//to scan pages that have been acsesed
+uint64
+sys_pgaccess(void)
+{
+  int MAXSCAN = 32;     //maximun number of scan pages
+  uint64 va, buf;
+  int scanNum;
+
+  if(argaddr(0, &va) < 0)
+    return -1;
+  if(argint(1, &scanNum) < 0)
+    return -1;
+  if(argaddr(2, &buf) < 0)
+    return -1;
+  
+  if(scanNum > MAXSCAN)
+    return -1;
+
+  
+  
+}
