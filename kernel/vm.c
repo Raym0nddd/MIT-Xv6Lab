@@ -433,6 +433,7 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   }
 }
 
+//print out every pte of certain pagetable
 void
 vmprint(pagetable_t pagetable, int level)
 {
