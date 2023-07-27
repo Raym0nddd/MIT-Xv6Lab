@@ -176,6 +176,7 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
       panic("uvmunmap: walk");
     if((*pte & PTE_V) == 0)
       panic("uvmunmap: not mapped");
+      // continue;
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
     if(do_free){
@@ -303,7 +304,6 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
@@ -311,12 +311,15 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
+    if(*pte & PTE_W)
+    {
+      *pte |= PTE_C;
+      *pte &= ~PTE_W;
+    }
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+    indexRecord(pa);
+    
+    if(mappages(new, i, PGSIZE, (uint64)pa, flags) != 0){
       goto err;
     }
   }
@@ -347,9 +350,17 @@ int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
   uint64 n, va0, pa0;
+  int ret;
 
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
+    ret = checkCow(pagetable, va0);
+    if(ret < 0)
+      return -1;
+    else if(ret)
+      if(cowalloc(pagetable, va0))
+        return -1;
+
     pa0 = walkaddr(pagetable, va0);
     if(pa0 == 0)
       return -1;
@@ -431,4 +442,65 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+int 
+checkCow(pagetable_t pgtbl, uint64 va)
+{
+  if(va >= MAXVA) 
+    return -1;
+  pte_t* pte = walk(pgtbl, va, 0);
+  if(pte == 0)             // 如果这个页不存在
+    return -1;
+  if((*pte & PTE_V) == 0)
+    return -1;
+  if((*pte & PTE_U) == 0)
+    return -1;
+  return ((*pte) & PTE_C); // 有 PTE_C 的代表还没复制过，并且是 cow 页
+}
+
+int 
+cowalloc(pagetable_t pgtbl, uint64 va)
+{
+  va = PGROUNDDOWN(va);
+  pagetable_t p = pgtbl;
+  pte_t* pte = walk(p, va, 0);
+  uint64 pa = PTE2PA(*pte);
+  uint flags = PTE_FLAGS(*pte);
+  int ret = 0;
+
+  if(!(flags & PTE_C)){
+    printf("not cow\n");
+    return 1; // not cow page
+  }
+
+  if(!(flags & PTE_C) && (!(flags & PTE_W)))  //not Cow neither PTE_W
+    return -1;
+
+  if(flags & PTE_W && (!(flags & PTE_C)))   //is PTE_W not PTE_C
+    return 0;
+
+  *pte = ((*pte) & (~PTE_C)) | PTE_W;
+  flags = PTE_FLAGS(*pte);
+
+  indexLock();
+  uint count = indexGet(pa);
+  if(count > 1){
+    // ref > 1, alloc a new page
+    char* mem = kalloc();
+    if(mem == 0)
+      ret = 1;
+    else{
+      memmove(mem, (char*)pa, PGSIZE);
+      uvmunmap(p, va, 1, 0);
+      if(mappages(p, va, PGSIZE, (uint64)mem, flags) != 0){
+        kfree(mem);
+        ret = 1;
+      }
+    }
+    indexSet(pa, count - 1);
+  }
+
+  indexUnlock();
+  return ret;
 }
