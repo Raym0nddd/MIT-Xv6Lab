@@ -489,7 +489,14 @@ cowalloc(pagetable_t pgtbl, uint64 va)
     // ref > 1, alloc a new page
     char* mem = kalloc();
     if(mem == 0)
+    {
       ret = 1;
+      // indexSet(pa, count - 1);
+      indexUnlock();
+      return ret;
+    }
+      
+      // panic("cowalloc: no mem to alloc");
     else{
       memmove(mem, (char*)pa, PGSIZE);
       uvmunmap(p, va, 1, 0);

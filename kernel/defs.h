@@ -68,6 +68,8 @@ void            indexUnlock();
 void            indexRecord(uint64 pa);
 uint            indexGet(uint64 pa);
 void            indexSet(uint64 pa, uint n);
+// int             inc(uint64 pa);
+// int             get_ref(uint64 pa);
 
 // log.c
 void            initlog(int, struct superblock*);
@@ -177,6 +179,7 @@ int             copyin(pagetable_t, char *, uint64, uint64);
 int             copyinstr(pagetable_t, char *, uint64, uint64);
 int             checkCow(pagetable_t, uint64);
 int             cowalloc(pagetable_t, uint64);
+// int             cow(pagetable_t pagetable,uint64 va);
 
 // plic.c
 void            plicinit(void);
