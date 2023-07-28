@@ -14,6 +14,8 @@ struct entry {
   struct entry *next;
 };
 struct entry *table[NBUCKET];
+pthread_mutex_t lock[NBUCKET]; // declare lock
+
 int keys[NKEYS];
 int nthread = 1;
 
@@ -27,7 +29,7 @@ now()
 }
 
 static void 
-insert(int key, int value, struct entry **p, struct entry *n)
+insert(int key, int value, struct entry **p, struct entry *n)   //头插法
 {
   struct entry *e = malloc(sizeof(struct entry));
   e->key = key;
@@ -41,6 +43,7 @@ void put(int key, int value)
 {
   int i = key % NBUCKET;
 
+  pthread_mutex_lock(&lock[i]); 
   // is the key already present?
   struct entry *e = 0;
   for (e = table[i]; e != 0; e = e->next) {
@@ -54,6 +57,7 @@ void put(int key, int value)
     // the new is new.
     insert(key, value, &table[i], table[i]);
   }
+  pthread_mutex_unlock(&lock[i]); 
 
 }
 
@@ -117,6 +121,10 @@ main(int argc, char *argv[])
   for (int i = 0; i < NKEYS; i++) {
     keys[i] = random();
   }
+
+  //initialize the locks
+  for(int i = 0; i < NBUCKET; i++)
+    pthread_mutex_init(&lock[i], NULL);
 
   //
   // first the puts
