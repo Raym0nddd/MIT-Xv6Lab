@@ -61,7 +61,7 @@ procinit(void)
 // to a different CPU.
 int
 cpuid()
-{
+{ 
   int id = r_tp();
   return id;
 }
