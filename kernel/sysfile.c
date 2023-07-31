@@ -322,6 +322,33 @@ sys_open(void)
     return -1;
   }
 
+  char nextPath[MAXPATH];
+  int counter = 0;
+  while(!(omode & O_NOFOLLOW) && ip->type == T_SYMLINK){
+    if(counter > 20){
+      iunlockput(ip);
+      end_op();
+      return -1;
+    }
+    //read next path
+    memset(nextPath, 0, sizeof(nextPath));
+    if(readi(ip, 0, (uint64)nextPath, 0, MAXPATH) < MAXPATH){
+      iput(ip);
+      end_op();
+      return -1;
+    }
+
+    iunlockput(ip);
+    //read next inode
+    if((ip = namei(nextPath)) == 0){
+      end_op();
+      return -1;
+    }
+    ilock(ip);
+    counter++;
+  }
+
+
   if((f = filealloc()) == 0 || (fd = fdalloc(f)) < 0){
     if(f)
       fileclose(f);
@@ -482,5 +509,36 @@ sys_pipe(void)
     fileclose(wf);
     return -1;
   }
+  return 0;
+}
+
+uint64
+sys_symlink(void)
+{
+  char target[MAXPATH], path[MAXPATH];
+  struct inode *ip;
+
+  if(argstr(0, target, MAXPATH) < 0)
+    return -1;
+
+  if(argstr(1, path, MAXPATH) < 0)
+    return -1;
+
+  begin_op();
+  if((ip = create(path, T_SYMLINK, 0, 0)) == 0){
+    end_op();
+    return -1;
+  }
+
+  if(writei(ip, 0, (uint64)target, 0, MAXPATH) < MAXPATH){
+    printf("symlink: fail to write ip data!\n");
+    iunlockput(ip);     //free the inode
+    end_op();
+    return -1;
+  }
+
+  //commit the transaction
+  iunlockput(ip);
+  end_op();
   return 0;
 }
