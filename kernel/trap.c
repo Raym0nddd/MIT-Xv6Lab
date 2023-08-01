@@ -5,6 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "fcntl.h"
 
 struct spinlock tickslock;
 uint ticks;
@@ -33,6 +34,8 @@ trapinithart(void)
 // handle an interrupt, exception, or system call from user space.
 // called from trampoline.S
 //
+extern uint64 mmapHandler(uint64 va, struct proc *p);
+
 void
 usertrap(void)
 {
@@ -67,6 +70,14 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
+  } else if(r_scause() == 0xd){
+    uint64 va = r_stval();
+    // printf("PGSIZE: %p\n", PGSIZE);
+    // printf("trap: va is %p, pid: %d", va, p->pid);
+    // printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+    if(mmapHandler(va, p) < 0)
+      p->killed = 1;
+
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());

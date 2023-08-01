@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "proc.h": "c",
+        "fcntl.h": "c",
+        "string_view": "c",
+        "file.h": "c"
+    }
+}
