@@ -13,7 +13,6 @@
 // * Only one process at a time can use a buffer,
 //     so do not keep them longer than necessary.
 
-
 #include "types.h"
 #include "param.h"
 #include "spinlock.h"
@@ -25,7 +24,8 @@
 
 #define hashNum 13
 
-struct {
+struct
+{
   struct spinlock lock[hashNum];
   struct buf head[hashNum];
   struct buf buf[NBUF];
@@ -37,39 +37,38 @@ struct {
 
 struct spinlock bcachelock;
 
-uint
-hashIndex(uint dev, uint blockno)
+uint hashIndex(uint dev, uint blockno)
 {
-  return blockno%hashNum;
+  return blockno % hashNum;
 }
 
-void
-binit(void)
+void binit(void)
 {
   struct buf *b;
   char name[10];
 
   initlock(&bcachelock, "search_lock");
 
-  for(int i = 0 ; i < hashNum; i++){
+  for (int i = 0; i < hashNum; i++)
+  {
     snprintf(name, 1, "bcache-%d", i);
     initlock(&bcache.lock[i], name);
   }
-    
+
   // initialize block's lock
   bcache.head[0].next = &bcache.buf[0];
-  for(b = bcache.buf; b < bcache.buf + NBUF - 1; b++) {
+  for (b = bcache.buf; b < bcache.buf + NBUF - 1; b++)
+  {
     b->next = b + 1;
     initsleeplock(&b->lock, "b_lock");
   }
-  initsleeplock(&b->lock,"b_lock");
-  
+  initsleeplock(&b->lock, "b_lock");
 }
 
 // Look through buffer cache for block on device dev.
 // If not found, allocate a buffer.
 // In either case, return locked buffer.
-static struct buf*
+static struct buf *
 bget(uint dev, uint blockno)
 {
   // acquire(&bcachelock);
@@ -80,15 +79,18 @@ bget(uint dev, uint blockno)
   acquire(&bcache.lock[index]);
 
   // Is the block already cached?
-  for(b = bcache.head[index].next, pre = &bcache.head[index]; b; b = b->next, pre = pre->next){
-    if(b->dev == dev && b->blockno == blockno){
+  for (b = bcache.head[index].next, pre = &bcache.head[index]; b; b = b->next, pre = pre->next)
+  {
+    if (b->dev == dev && b->blockno == blockno)
+    {
       b->refcnt++;
       release(&bcache.lock[index]);
       // release(&bcachelock);
       acquiresleep(&b->lock);
       return b;
     }
-    if(b->refcnt == 0 && b->ticks < minticks){
+    if (b->refcnt == 0 && b->ticks < minticks)
+    {
       off = b;
       minticks = b->ticks;
     }
@@ -96,7 +98,8 @@ bget(uint dev, uint blockno)
 
   // Not cached.
   // Recycle the least recently used (LRU) unused buffer.
-  if(off){
+  if (off)
+  {
     off->dev = dev;
     off->blockno = blockno;
     off->valid = 0;
@@ -108,26 +111,47 @@ bget(uint dev, uint blockno)
     return off;
   }
 
-  //find free block in other bucket
+  // find free block in other bucket
+  release(&bcache.lock[index]);
   acquire(&bcachelock);
-  for(int i = 0; i < hashNum; i++){
-    if(i == index)
+
+  for (int i = 0; i < hashNum; i++)
+  {
+    if (i == index)
       continue;
-    
+
     acquire(&bcache.lock[i]);
-    for(b = bcache.head[i].next, tmp = &bcache.head[i]; b; b=b->next, tmp = tmp->next){
-      if(b->refcnt == 0 && b->ticks < minticks){
+    for (b = bcache.head[i].next, tmp = &bcache.head[i]; b; b = b->next, tmp = tmp->next)
+    {
+      if (b->refcnt == 0 && b->ticks < minticks)
+      {
         off = b;
         minticks = b->ticks;
         bfoff = tmp;
       }
     }
 
-    if(off){
+    if (off)
+    {
+      acquire(&bcache.lock[index]);
+
+      //invent mltiple cache
+      for (b = bcache.head[index].next, pre = &bcache.head[index]; b; b = b->next, pre = pre->next)
+      {
+        if (b->dev == dev && b->blockno == blockno)
+        {
+          b->refcnt++;
+          release(&bcache.lock[index]);
+          release(&bcachelock);
+          acquiresleep(&b->lock);
+          return b;
+        }
+      }
+
       bfoff->next = off->next;
       off->next = 0;
       pre->next = off;
-
+      
       off->dev = dev;
       off->blockno = blockno;
       off->valid = 0;
@@ -139,7 +163,7 @@ bget(uint dev, uint blockno)
       release(&bcachelock);
       return off;
     }
-    
+
     release(&bcache.lock[i]);
   }
 
@@ -147,13 +171,14 @@ bget(uint dev, uint blockno)
 }
 
 // Return a locked buf with the contents of the indicated block.
-struct buf*
+struct buf *
 bread(uint dev, uint blockno)
 {
   struct buf *b;
 
   b = bget(dev, blockno);
-  if(!b->valid) {
+  if (!b->valid)
+  {
     virtio_disk_rw(b, 0);
     b->valid = 1;
   }
@@ -161,49 +186,44 @@ bread(uint dev, uint blockno)
 }
 
 // Write b's contents to disk.  Must be locked.
-void
-bwrite(struct buf *b)
+void bwrite(struct buf *b)
 {
-  if(!holdingsleep(&b->lock))
+  if (!holdingsleep(&b->lock))
     panic("bwrite");
   virtio_disk_rw(b, 1);
 }
 
 // Release a locked buffer.
 // Move to the head of the most-recently-used list.
-void
-brelse(struct buf *b)
+void brelse(struct buf *b)
 {
-  if(!holdingsleep(&b->lock))
+  if (!holdingsleep(&b->lock))
     panic("brelse");
 
   releasesleep(&b->lock);
 
   uint index = hashIndex(b->dev, b->blockno);
-  acquire(&bcache.lock[index]);     //avoid 
+  acquire(&bcache.lock[index]); // avoid
   b->refcnt--;
   // acquire(&tickslock);
-  if(b->refcnt == 0)
+  if (b->refcnt == 0)
     b->ticks = ticks;
   // release(&tickslock);
   release(&bcache.lock[index]);
-
 }
 
-void
-bpin(struct buf *b) {
+void bpin(struct buf *b)
+{
   uint index = hashIndex(b->dev, b->blockno);
   acquire(&bcache.lock[index]);
   b->refcnt++;
   release(&bcache.lock[index]);
 }
 
-void
-bunpin(struct buf *b) {
+void bunpin(struct buf *b)
+{
   uint index = hashIndex(b->dev, b->blockno);
   acquire(&bcache.lock[index]);
   b->refcnt--;
   release(&bcache.lock[index]);
 }
-
-
