@@ -578,15 +578,19 @@ sys_mmap(void)
   return p->vma[index].addr;
 }
 
-uint64
+int
 mmapHandler(uint64 va, struct proc *p)
 {
   struct VMA *vma = 0;
   int flag = PTE_U;
   char *pa;
+
+  if(va < 0 || va >= MAXVA)
+    return -1;
+
   for (int i = 0; i < VMASIZE; i++)
   {
-    if (p->vma[i].valid && va >= p->vma[i].addr && va <= (p->vma[i].length + p->vma[i].addr))
+    if (p->vma[i].valid && va >= p->vma[i].addr && va < (p->vma[i].length + p->vma[i].addr))
     {
       vma = &(p->vma[i]);
       // printf("mmapHandler: i is %d\n",i);
@@ -602,8 +606,10 @@ mmapHandler(uint64 va, struct proc *p)
   memset(pa, 0, PGSIZE);
 
   ilock(vma->fp->ip);
-  if (readi(vma->fp->ip, 0, (uint64)pa, vma->offset + va - vma->addr, PGSIZE) == 0)
+  if (readi(vma->fp->ip, 0, (uint64)pa, vma->offset + va - vma->addr, PGSIZE) == 0) {
+    iunlock(vma->fp->ip);
     return -1;
+  }
   iunlock(vma->fp->ip);
 
   if (vma->prot & PROT_WRITE)
